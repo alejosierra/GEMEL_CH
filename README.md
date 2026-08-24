@@ -1,3 +1,7 @@
+# Adaptation of GEMEL for Multimodal Entity Linking in the Cultural Heritage Domain
+
+The original repository for GEMEL can be found [here](https://github.com/HITsz-TMG/GEMEL).
+
 # GEMEL: Generative Multimodal Entity Linking
 
 <div align="center">
