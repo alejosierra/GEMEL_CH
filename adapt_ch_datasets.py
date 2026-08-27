@@ -7,8 +7,9 @@ import torch
 from tqdm import tqdm
 from pathlib import Path
 from PIL import Image
-from transformers import CLIPProcessor, CLIPModel
+from transformers import AutoTokenizer, CLIPProcessor, CLIPModel
 from tqdm import tqdm
+from params import MODEL_PATH
 
 if __name__=='__main__':
 
@@ -25,6 +26,7 @@ if __name__=='__main__':
     argparse.add_argument('--ent_train_data_dir', type=str, default="data/wikimusa/depicted_entities.json", help='Path to save the adapted depicted entities JSON file')
     argparse.add_argument('--ent_prefix_tree_file', type=str, default="data/wikimusa/prefix_tree.pkl", help='Path to save the adapted depicted entities Prefix tree')
     argparse.add_argument('--ent_prefix_tree_id_first', action='store_true', help='Whether to use the entity ID as the first element in the prefix tree')
+    argparse.add_argument('--lm_model', type=str, default="llama-3-8b", choices=list(MODEL_PATH.keys()), help='Language model to use for processing')
 
     args = argparse.parse_args()
 
@@ -144,21 +146,7 @@ if __name__=='__main__':
                     f.write(json.dumps(mention, ensure_ascii=False) + "\n")
 
         # Process images and save features to HDF5
-        """
 
-                # encode the image using clip for adding to the hdf5 file
-                image = Image.open(img_path)
-                image_input = clip_processor(images=image, return_tensors="pt")
-                image_features = clip_model.vision_model(**image_input).last_hidden_state
-
-                # get the CLS token representation
-                cls_token_representation = image_features[:, 0, :].squeeze()
-
-                # save the image features to the HDF5 file
-                hdf5_file.create_dataset(img_name, data=cls_token_representation.detach().numpy())
-        """
-
-        #process them in batches
         batch_size = 32
         img_names = list(all_images.keys())
         for i in tqdm(range(0, len(img_names), batch_size), desc="Processing images in batches"):
@@ -174,5 +162,20 @@ if __name__=='__main__':
             for j, img_name in enumerate(batch_img_names):
                 hdf5_file.create_dataset(img_name, data=cls_token_representations[j].to("cpu").detach().numpy())
 
+        tokenizer=AutoTokenizer.from_pretrained(MODEL_PATH[args.lm_model])
 
-    
+        all_sequences = []
+
+        for entity_id, entity_text in tqdm(all_entities.items(), desc="Building prefix tree"):
+            # Tokenize the entity text
+            tokenized_sequence = tokenizer.encode(entity_text + tokenizer.eos_token, add_special_tokens=True)
+            all_sequences.append(tokenized_sequence)
+
+        # Build the prefix tree
+        from trie import Trie
+        prefix_tree = Trie(sequences=all_sequences, end_token_id=tokenizer.eos_token_id)
+
+        # Save the prefix tree to a file
+        import pickle
+        with open(args.ent_prefix_tree_file, 'wb') as f:
+            pickle.dump(prefix_tree.trie_dict, f)
