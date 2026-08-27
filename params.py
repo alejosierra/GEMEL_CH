@@ -10,6 +10,7 @@ MODEL_PATH = {
     'opt-6.7b': 'facebook/opt-6.7b',
     'opt-2.7b': 'facebook/opt-2.7b',
     'opt-1.3b': 'facebook/opt-1.3b',
+    'llama-3-8b': 'meta-llama/Meta-Llama-3-8B-Instruct',
 }
 
 
@@ -17,7 +18,7 @@ def get_args():
     args_parser = argparse.ArgumentParser(description='GEMEL')
 
     # dataset
-    args_parser.add_argument('--dataset', type=str, default='wikidiverse', choices=['wikidiverse', 'wikimel'],)
+    args_parser.add_argument('--dataset', type=str, default='wikidiverse', choices=['wikidiverse', 'wikimel', 'wikimusa', 'melart'],)
 
     # dictionary or file
     args_parser.add_argument('--data_dir', type=str, default='./data/')
