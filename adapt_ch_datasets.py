@@ -1,15 +1,19 @@
 
 import argparse as ArgumentParser
+from collections import defaultdict
 import json
 import h5py
+import numpy as np
 import torch
 import torch
 from tqdm import tqdm
 from pathlib import Path
 from PIL import Image
-from transformers import AutoTokenizer, CLIPProcessor, CLIPModel
+from transformers import AutoModel, AutoTokenizer, CLIPProcessor, CLIPModel
 from tqdm import tqdm
 from params import MODEL_PATH
+from trie import Trie
+import pickle
 
 if __name__=='__main__':
 
@@ -27,6 +31,8 @@ if __name__=='__main__':
     argparse.add_argument('--ent_prefix_tree_file', type=str, default="data/wikimusa/prefix_tree.pkl", help='Path to save the adapted depicted entities Prefix tree')
     argparse.add_argument('--ent_prefix_tree_id_first', action='store_true', help='Whether to use the entity ID as the first element in the prefix tree')
     argparse.add_argument('--lm_model', type=str, default="llama-3-8b", choices=list(MODEL_PATH.keys()), help='Language model to use for processing')
+    argparse.add_argument('--simcse_model', type=str, default='princeton-nlp/sup-simcse-roberta-large')
+    argparse.add_argument('--mention_train_mentions_embed_file', type=str, default='data/wikimusa/train_mentions_embeddings.pkl', help='Path to save the training mentions embeddings file')
 
     args = argparse.parse_args()
 
@@ -83,7 +89,9 @@ if __name__=='__main__':
     # change config to include hidden states for clip_model
     clip_model.config.vision_config.output_hidden_states = True
 
-    with torch.no_grad(), h5py.File(args.mention_image_feats_file, 'w') as hdf5_file:
+    all_text = defaultdict(list)
+
+    with torch.no_grad():
 
         all_images = dict() #. img_name to path
 
@@ -140,6 +148,7 @@ if __name__=='__main__':
                     "img_name": img_name
                 }
                 new_mentions.append(new_mention)
+                all_text[split].append(new_mention.get("text", ""))
 
             with open(mentions_output_dir, 'w', encoding='utf-8') as f:
                 for mention in new_mentions:
@@ -147,20 +156,22 @@ if __name__=='__main__':
 
         # Process images and save features to HDF5
 
-        batch_size = 32
-        img_names = list(all_images.keys())
-        for i in tqdm(range(0, len(img_names), batch_size), desc="Processing images in batches"):
-            batch_img_names = img_names[i:i + batch_size]
-            batch_images = [Image.open(all_images[img_name]) for img_name in batch_img_names]
-            image_inputs = clip_processor(images=batch_images, return_tensors="pt", padding=True).to("cuda" if torch.cuda.is_available() else "cpu")
-            image_features = clip_model.vision_model(**image_inputs).last_hidden_state
+        with h5py.File(args.mention_image_feats_file, 'w') as hdf5_file:
 
-            # get the CLS token representation for each image in the batch
-            cls_token_representations = image_features[:, 0, :] # (batch_size, hidden_size)
+            batch_size = 32
+            img_names = list(all_images.keys())
+            for i in tqdm(range(0, len(img_names), batch_size), desc="Processing images in batches"):
+                batch_img_names = img_names[i:i + batch_size]
+                batch_images = [Image.open(all_images[img_name]) for img_name in batch_img_names]
+                image_inputs = clip_processor(images=batch_images, return_tensors="pt", padding=True).to("cuda" if torch.cuda.is_available() else "cpu")
+                image_features = clip_model.vision_model(**image_inputs).last_hidden_state
 
-            # save the image features to the HDF5 file
-            for j, img_name in enumerate(batch_img_names):
-                hdf5_file.create_dataset(img_name, data=cls_token_representations[j].to("cpu").detach().numpy())
+                # get the CLS token representation for each image in the batch
+                cls_token_representations = image_features[:, 0, :] # (batch_size, hidden_size)
+
+                # save the image features to the HDF5 file
+                for j, img_name in enumerate(batch_img_names):
+                    hdf5_file.create_dataset(img_name, data=cls_token_representations[j].to("cpu").detach().numpy())
 
         tokenizer=AutoTokenizer.from_pretrained(MODEL_PATH[args.lm_model])
 
@@ -172,10 +183,32 @@ if __name__=='__main__':
             all_sequences.append(tokenized_sequence)
 
         # Build the prefix tree
-        from trie import Trie
         prefix_tree = Trie(sequences=all_sequences, end_token_id=tokenizer.eos_token_id)
 
         # Save the prefix tree to a file
         import pickle
         with open(args.ent_prefix_tree_file, 'wb') as f:
             pickle.dump(prefix_tree.trie_dict, f)
+
+        #embed the training mention texts using simcse model
+        embed_model = AutoModel.from_pretrained(args.simcse_model).to("cuda" if torch.cuda.is_available() else "cpu")
+        embed_tokenizer = AutoTokenizer.from_pretrained(args.simcse_model)
+        train_texts = all_text['train']
+        train_embeddings = []
+
+        batch_size = 32
+        for i in tqdm(range(0, len(train_texts), batch_size), desc="Embedding training mentions"):
+            batch_texts = train_texts[i:i + batch_size]
+            inputs = embed_tokenizer(batch_texts, padding=True, truncation=True, return_tensors="pt").to("cuda" if torch.cuda.is_available() else "cpu")
+            with torch.no_grad():
+                outputs = embed_model(**inputs, output_hidden_states=True, return_dict=True)
+                embeddings = outputs.pooler_output.cpu().numpy()
+                train_embeddings.extend(embeddings)
+
+        # Save the training mention embeddings to a file
+        
+        with open(args.mention_train_mentions_embed_file, 'wb') as f:
+            np_2d_array = np.array(train_embeddings)
+            pickle.dump(np_2d_array, f)
+
+        
