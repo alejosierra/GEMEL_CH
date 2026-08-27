@@ -17,7 +17,7 @@ class GEMELModel(nn.Module):
         self.lm = lm
         self.tokenizer = tokenizer
         self.kwargs = kwargs
-        self.text_embedder = self.lm.model.decoder.embed_tokens  # for opt
+        self.text_embedder = self.lm.model.embed_tokens #self.lm.model.decoder.embed_tokens  # for opt
         self.linear = nn.Linear(kwargs['dim_clip'], kwargs['dim_embedding'] * kwargs['visual_prefix_length'], dtype=torch.float16)
 
     def forward(self, batch_pairs, batch_targets):

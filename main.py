@@ -14,7 +14,7 @@ import os
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 from torch.utils.tensorboard import SummaryWriter
-from transformers import AutoModel
+from transformers import AutoModel, AutoModelForCausalLM
 
 from model import GEMELModel
 
@@ -151,7 +151,7 @@ def _main(args):
 
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     #  load the model in half-precision to accelerate generation and optimize memory consumption on GPU
-    lm = OPTForCausalLM.from_pretrained(args.model_path, torch_dtype=torch.float16, cache_dir=args.cache_dir)
+    lm = AutoModelForCausalLM.from_pretrained(args.model_path, torch_dtype=torch.float16, cache_dir=args.cache_dir)
     # freeze large language model
     print('\nFreeze LLM\n')
     for param in lm.parameters():

@@ -62,16 +62,17 @@ class GEMELDataset(Dataset):
                     img_url = tmpDict["img_url"]
                 try:
                     tmpDict["image"] = h[img_url][()]  # add image attribution to self.data
+                    #print("succesfully load image: {}".format(img_url))
                 except:
                     raise Exception(f'\ncan not load {img_url} from {self.kwargs["img_feat"]}')
 
     def _get_examples(self):
         print(f'\nRetrieve {self.file} ICL examples')
         for tmpDict in tqdm(self.data):
-            mention = tmpDict['mention']
+            #mention = tmpDict['mention']
             text = tmpDict['text']
 
-            query = self.kwargs['roberta_tokenizer'](mention, padding=True, truncation=True, return_tensors="pt").to(self.kwargs['device'])
+            query = self.kwargs['roberta_tokenizer'](text, padding=True, truncation=True, return_tensors="pt").to(self.kwargs['device'])
             with torch.no_grad():
                 query_embed = self.kwargs['roberta_model'](**query, output_hidden_states=True, return_dict=True).pooler_output
             scores = cosine_similarity(self.kwargs['train_embed'], query_embed.cpu().numpy())
@@ -87,7 +88,7 @@ class GEMELDataset(Dataset):
                     train_index = index_list[tmp_index]
                     item = self.kwargs['train_ds'][train_index]
                     tmp_index -= 1
-                    if item['mention'] == mention and item['text'] == text:  # the same as train item
+                    if item['text'] == text:  # the same as train item
                         continue
                     else:  # different with train item
                         prefix_items.append(item)  # similarity decreases from left to right
@@ -108,12 +109,12 @@ class GEMELDataset(Dataset):
         return batch_pairs, batch_targets
 
     def _get_pairs(self, item):
-        text, mention, image = item['text'], item['mention'], item['image']
+        text, image = item['text'], item['image']
         if self.kwargs['ICL_examples_num'] != 0:
             prefix_list = self._similar_prefix(item)
         else:
             prefix_list = []
-        text_ = f'[Text]{text}\n[Question]What does {mention} mentioned in the text refer to?\n[Answer]'
+        text_ = f'[Text]{text}\n[Question]Which entities are depicted in the artwork?\n[Answer]'
         pair = (image, text_)
         pair_list = prefix_list + [pair]
         return pair_list
@@ -122,7 +123,8 @@ class GEMELDataset(Dataset):
         prefix_items = item['examples']
         prefix_list = []
         for demo in prefix_items:
-            text_ = f'[Text]{demo["text"]}\n[Question]What does {demo["mention"]} mentioned in the text refer to?\n[Answer]{demo["target"]}\n'
+            demo_gt_text = ", ".join(demo['golden'])
+            text_ = f'[Text]{demo["text"]}\n[Question]Which entities are depicted in the artwork?\n[Answer]{demo_gt_text}\n'
             image = demo['image']
             prefix_list.append((image, text_))
         return prefix_list

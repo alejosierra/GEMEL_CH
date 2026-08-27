@@ -24,7 +24,7 @@ def get_args():
     args_parser.add_argument('--data_dir', type=str, default='./data/')
     args_parser.add_argument('--log_dir', type=str, default='./log/')
     args_parser.add_argument('--ckpt_dir', type=str, default='./checkpoint/')
-    args_parser.add_argument('--cache_dir', type=str, default=None)
+    args_parser.add_argument('--cache_dir', type=str, default=os.environ.get('HF_HUB_CACHE', None))
     args_parser.add_argument('--img_feat', type=str, default='clip_vit_large_patch14_1024.hdf5')
     args_parser.add_argument('--trie_file', type=str, default='prefix_tree_opt.pkl')
     args_parser.add_argument('--ment_embed_file', type=str, default='SimCSE_train_mention_embeddings.pkl')
