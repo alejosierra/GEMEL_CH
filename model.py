@@ -16,6 +16,10 @@ class GEMELModel(nn.Module):
         super(GEMELModel, self).__init__()
         self.lm = lm
         self.tokenizer = tokenizer
+        self.bos_token_id = tokenizer.bos_token_id
+        self.eos_token_id = tokenizer.eos_token_id
+        self.bos_token = tokenizer.bos_token
+        self.eos_token = tokenizer.eos_token
         self.kwargs = kwargs
         self.text_embedder = self.lm.model.embed_tokens #self.lm.model.decoder.embed_tokens  # for opt
         self.linear = nn.Linear(kwargs['dim_clip'], kwargs['dim_embedding'] * kwargs['visual_prefix_length'], dtype=torch.float16)
@@ -46,7 +50,8 @@ class GEMELModel(nn.Module):
                 item_feat.append(text_embed)
 
             # target
-            target_ids = self.tokenizer(batch_targets[i] + '</s>', return_tensors="pt").input_ids[0, 1:].to(self.kwargs['device'])  # (token_num) remove bos, add eos
+            taeget_str = ", ".join(batch_targets[i])
+            target_ids = self.tokenizer(taeget_str + self.eos_token, return_tensors="pt").input_ids[0, 1:].to(self.kwargs['device'])  # (token_num) remove bos, add eos
             target_embed = self.text_embedder(target_ids)  # (token_num, dim_embedding)
             item_feat.append(target_embed)
             item_embeds = torch.cat(item_feat, dim=0) # (token_num, dim_embedding)
@@ -61,7 +66,7 @@ class GEMELModel(nn.Module):
         tokens_length = [item.shape[0] for item in batch_embeds]
         max_token_len = max(tokens_length)
 
-        pad_ids = self.tokenizer('<pad>', return_tensors="pt")['input_ids'][0, 1:].to(self.kwargs['device'])
+        pad_ids = self.tokenizer("<|pad|>", return_tensors="pt")['input_ids'][0, 1:].to(self.kwargs['device'])
         pad_embed = self.text_embedder(pad_ids)  # (1, dim_embedding)
 
         inputs_embeds, labels, attention_mask = [], [], []
@@ -108,7 +113,7 @@ class GEMELModel(nn.Module):
         tokens_length = [item.shape[0] for item in batch_embeds]
         max_token_len = max(tokens_length)
 
-        pad_ids = self.tokenizer('<pad>', return_tensors="pt")['input_ids'][0, 1:].to(self.kwargs['device'])
+        pad_ids = self.tokenizer('<|pad|>', return_tensors="pt")['input_ids'][0, 1:].to(self.kwargs['device'])
         pad_embed = self.text_embedder(pad_ids)  # (1, dim_embedding)
 
         inputs_embeds, attention_mask = [], []

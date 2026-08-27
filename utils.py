@@ -105,7 +105,7 @@ class GEMELDataset(Dataset):
         batch_pairs, batch_targets = [], []
         for item in items:
             batch_pairs.append(self._get_pairs(item))
-            batch_targets.append(item['target'])
+            batch_targets.append(item['golden'])
         return batch_pairs, batch_targets
 
     def _get_pairs(self, item):
