@@ -35,7 +35,7 @@ class Trie(object):
 
     def get(self, prefix_sequence: List[int]):
         '''rectify the prefix_sequence'''
-        prefix_sequence_ = []
+        prefix_sequence_ = prefix_sequence
         for i in range(len(prefix_sequence) - 1, -1, -1):
             if prefix_sequence[i] == self.end_token_id: # When passing embeddings to LLM, the sequence begins with eos
                 prefix_sequence_ = prefix_sequence[i:]
@@ -109,6 +109,11 @@ class Trie(object):
 
 
 if __name__ == '__main__':
-    # tree = Trie([[1, 2, 3], [1, 5, 6]])
-    # print(tree.get([1]))
+    tree = Trie([[1, 2, 3], [1, 5, 6]])
+    print(tree.get([1]))
+
+    eos=-1
+    tree = Trie([[1, 2, 3, eos], [1, 5, 6, eos]], end_token_id=eos)
+    print(tree.get([1, eos]))
+
     pass
