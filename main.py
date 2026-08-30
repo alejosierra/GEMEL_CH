@@ -160,12 +160,34 @@ def _main(args):
     args.dim_embedding = lm.config.hidden_size
     kwargs_model = {'dim_clip': args.dim_clip, 'dim_embedding': args.dim_embedding,
                     'visual_prefix_length': args.visual_prefix_length, 'device': args.device}
-    args.model = GEMELModel(lm=lm, tokenizer=args.tokenizer, **kwargs_model).to(args.device)
+
+    # print used and free GPU memory
+    #print(f'\nGPU memory usage: {torch.cuda.memory_allocated() / 1024 ** 3:.2f} GB used, {torch.cuda.memory_reserved() / 1024 ** 3:.2f} GB reserved, {torch.cuda.max_memory_allocated() / 1024 ** 3:.2f} GB max allocated\n')
+    
+    args.model = GEMELModel(lm=lm, tokenizer=args.tokenizer, **kwargs_model)
+
+    lm.model.gradient_checkpointing_enable()
+
+    # print the number of parameters and the number of trainable parameters
+    total_params = sum(p.numel() for p in args.model.parameters())
+    trainable_params = sum(p.numel() for p in args.model.parameters() if p.requires_grad)
+
+    # convert to millions and round to 2 decimal places
+    total_params = round(total_params / 1e6, 2)
+    trainable_params = round(trainable_params / 1e6, 2)
+
+    print(f'Total parameters: {total_params}M, Trainable parameters: {trainable_params}M')
+
+    args.model.to(args.device)
+
+    print(f'\nGPU memory usage: {torch.cuda.memory_allocated() / 1024 ** 3:.2f} GB used, {torch.cuda.memory_reserved() / 1024 ** 3:.2f} GB reserved, {torch.cuda.max_memory_allocated() / 1024 ** 3:.2f} GB max allocated\n')
 
     # model for calculating similarity
     args.train_embed = get_embed(args.ment_embed_file)
     args.roberta_tokenizer = AutoTokenizer.from_pretrained(args.simcse_model)
     args.roberta_model = AutoModel.from_pretrained(args.simcse_model, cache_dir=args.cache_dir).to(args.device)
+
+    print(f'\nGPU memory usage: {torch.cuda.memory_allocated() / 1024 ** 3:.2f} GB used, {torch.cuda.memory_reserved() / 1024 ** 3:.2f} GB reserved, {torch.cuda.max_memory_allocated() / 1024 ** 3:.2f} GB max allocated\n')
 
     # 4.data
     # train dataset for calculating ICL similarity
