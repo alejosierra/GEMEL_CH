@@ -32,6 +32,7 @@ def get_args():
     # model related
     args_parser.add_argument('--model_name', type=str, default='opt-6.7b')
     args_parser.add_argument('--max_new_tokens', type=int, default=32, help='max length of generation tokens')
+    args_parser.add_argument('--max_text_tokens', type=int, help='max length of text tokens (mention texts)')
     args_parser.add_argument('--num_beams', type=int, default=5)
     args_parser.add_argument('--use_prefix_tree', type=bool, default=True)
     args_parser.add_argument('--visual_prefix_length', type=int, default=4)

@@ -66,6 +66,15 @@ class GEMELDataset(Dataset):
                 except:
                     raise Exception(f'\ncan not load {img_url} from {self.kwargs["img_feat"]}')
 
+    def _truncate_text(self, long_text):
+        if self.kwargs['max_text_tokens'] is None:
+            return long_text
+        # truncate text to max_text_tokens using self.tokenizer
+        text_ids = self.tokenizer(long_text, return_tensors="pt", truncation=True, max_length=self.kwargs['max_text_tokens'])
+        # decode text_ids to text
+        new_text = self.tokenizer.decode(text_ids['input_ids'][0], skip_special_tokens=True)
+        return new_text
+
     def _get_examples(self):
         print(f'\nRetrieve {self.file} ICL examples')
         for tmpDict in tqdm(self.data):
@@ -110,6 +119,7 @@ class GEMELDataset(Dataset):
 
     def _get_pairs(self, item):
         text, image = item['text'], item['image']
+        text = self._truncate_text(text)
         if self.kwargs['ICL_examples_num'] != 0:
             prefix_list = self._similar_prefix(item)
         else:
@@ -124,7 +134,8 @@ class GEMELDataset(Dataset):
         prefix_list = []
         for demo in prefix_items:
             demo_gt_text = ", ".join(demo['golden'])
-            text_ = f'[Text]{demo["text"]}\n[Question]Which entities are depicted in the artwork?\n[Answer]{demo_gt_text}\n'
+            demo_text = self._truncate_text(demo['text'])
+            text_ = f'[Text]{demo_text}\n[Question]Which entities are depicted in the artwork?\n[Answer]{demo_gt_text}\n'
             image = demo['image']
             prefix_list.append((image, text_))
         return prefix_list
@@ -153,10 +164,10 @@ def calc_acc(predictions, targets):
     return acc
 
 
-def load_prefix_tree(trie_file, eos_token_id):
+def load_prefix_tree(trie_file, bos_token_id, eos_token_id):
     print(f'\nload prefix tree')
     trie_dict = pd.read_pickle(trie_file)
-    trie = Trie.load_from_dict(trie_dict, eos_token_id)
+    trie = Trie.load_from_dict(trie_dict, end_token_id=eos_token_id, bos_token_id=bos_token_id)
     print(f'\ndone\n')
     return trie
 
@@ -185,6 +196,24 @@ def train_configure(args):
                                                 num_training_steps=args.total_steps)
     return optimizer, scheduler
 
+
+def get_prefix_allowed_fn(trie, tokenizer):
+        
+    # Define a function to condition the generation with the prefix tree
+    def trie_generation(batch_id, sent):
+        sent_list = sent.tolist()
+        if sent_list and sent_list[-1] == tokenizer.eos_token_id:
+            return [tokenizer.eos_token_id] # if the last token is eos, return eos only to keep the beams "rectangular"
+
+        #print(f'\ntrie_generation: batch_id: {batch_id}, sent: {sent_list}')
+        res= trie.get(sent_list)
+        #print(f'\ntrie_generation: len(res): {len(res)}, res: {res[:10]}...')  # print first 10 tokens of res
+        if not res:
+            #print(f'\ntrie_generation: No valid tokens found for batch_id: {batch_id}, sent: {sent_list}. Returning eos token.')
+            return [tokenizer.eos_token_id]  # return eos if no valid tokens found
+        return res    
+
+    return trie_generation
 
 if __name__ == '__main__':
 

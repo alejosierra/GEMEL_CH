@@ -19,12 +19,13 @@ from transformers import AutoModel, AutoModelForCausalLM
 from model import GEMELModel
 
 import random
+import gc
 
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import params
-from utils import check_dirs, set_seed, GEMELDataset, calc_acc, load_prefix_tree, get_embed, train_configure
+from utils import check_dirs, get_prefix_allowed_fn, set_seed, GEMELDataset, calc_acc, load_prefix_tree, get_embed, train_configure
 
 
 
@@ -47,6 +48,7 @@ def _eval(args, dl):
     # record
     eval_steps = len(dl)
     predictions, targets = [], []
+
     # evaluate
     args.model.eval()
     with torch.no_grad():
@@ -56,14 +58,26 @@ def _eval(args, dl):
                 pbar.update(1)
 
                 batch_pairs, batch_targets = batch_data
+
+                termination_tokens=[args.tokenizer.eos_token_id]
+                # add the ones already in the config
+                termination_tokens.extend(args.model.lm.generation_config.eos_token_id if isinstance(args.model.lm.generation_config.eos_token_id, list) else [args.model.lm.generation_config.eos_token_id])
+
+                termination_tokens=list(set(termination_tokens))  # remove duplicates
+
                 features = {
                     "batch_pairs": batch_pairs,
                     "num_beams": args.num_beams,
                     "num_return_sequences": 1,
                     "max_new_tokens": args.max_new_tokens,
+                    #"forced_bos_token_id": args.tokenizer.bos_token_id
+                    "eos_token_id": termination_tokens,
+                    "pad_token_id": args.tokenizer.eos_token_id,
+                    #"early_stopping": True,
                 }
+
                 if args.use_prefix_tree:
-                    features['prefix_allowed_tokens_fn'] = lambda batch_id, sent: args.trie.get(sent.tolist())
+                    features['prefix_allowed_tokens_fn'] = get_prefix_allowed_fn(args.trie, args.tokenizer)
                 generated = args.model.generate(**features)
                 batch_preds = args.tokenizer.batch_decode(generated, skip_special_tokens=True)
                 predictions.extend(batch_preds)
@@ -194,17 +208,26 @@ def _main(args):
     args.ICL_ds = GEMELDataset(args.data_file['train'], tokenizer=None, img_feat=args.img_feat)
 
     args.kwargs_ds = {'train_ds': args.ICL_ds, 'ICL_examples_num': args.ICL_examples_num, 'img_feat': args.img_feat, 'device': args.device,
-                      'train_embed': args.train_embed, 'roberta_tokenizer': args.roberta_tokenizer, 'roberta_model': args.roberta_model}
+                      'train_embed': args.train_embed, 'roberta_tokenizer': args.roberta_tokenizer, 'roberta_model': args.roberta_model,
+                      'max_text_tokens': args.max_text_tokens}
     train_ds = GEMELDataset(args.data_file['train'], args.tokenizer, train_flag=True, **args.kwargs_ds)  # train_flag: exclude same training example
     dev_ds = GEMELDataset(args.data_file['dev'], args.tokenizer, **args.kwargs_ds)
-    print(f'\ntrain data num: {len(train_ds)}  dev data num: {len(dev_ds)}')
+    #print(f'\ntrain data num: {len(train_ds)}  dev data num: {len(dev_ds)}')
+
+    # GPU Memory Optimization: Unload RoBERTa/SimCSE model after dataset initialization
+    print('\n[GPU Memory Optimization] Unloading SimCSE model...')
+    del args.roberta_model
+    del args.roberta_tokenizer
+    gc.collect()
+    torch.cuda.empty_cache()
+    print(f'GPU memory usage after SimCSE unload: {torch.cuda.memory_allocated() / 1024 ** 3:.2f} GB used, {torch.cuda.memory_reserved() / 1024 ** 3:.2f} GB reserved\n')
 
     args.train_dl = DataLoader(dataset=train_ds, batch_size=args.train_bs, collate_fn=train_ds.collate_fn, shuffle=True)
     args.eval_dl = DataLoader(dataset=dev_ds, batch_size=args.eval_bs, collate_fn=dev_ds.collate_fn, shuffle=False)
     args.total_steps = args.train_epoch * len(args.train_dl)
 
     # prefix tree
-    args.trie = load_prefix_tree(args.trie_file, args.tokenizer.eos_token_id) if args.use_prefix_tree else None
+    args.trie = load_prefix_tree(args.trie_file, bos_token_id=args.tokenizer.bos_token_id, eos_token_id=args.tokenizer.eos_token_id) if args.use_prefix_tree else None
 
     # 5.train
     args.optimizer, args.scheduler = train_configure(args)

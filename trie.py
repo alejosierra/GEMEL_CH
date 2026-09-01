@@ -13,7 +13,7 @@ from typing import Dict, List
 
 
 class Trie(object):
-    def __init__(self, sequences: List[List[int]] = [], end_token_id: int =None):
+    def __init__(self, sequences: List[List[int]] = [], bos_token_id: int =None ,end_token_id: int =None):
         self.trie_dict = {}
         self.len = 0
         if sequences:
@@ -22,7 +22,7 @@ class Trie(object):
                 self.len += 1
 
         self.append_trie = None
-        self.bos_token_id = None
+        self.bos_token_id = bos_token_id
         self.end_token_id = end_token_id
 
     def append(self, trie, bos_token_id):
@@ -35,20 +35,28 @@ class Trie(object):
 
     def get(self, prefix_sequence: List[int]):
         '''rectify the prefix_sequence'''
+        #prefix_sequence_ = prefix_sequence
+        # add bos at the beginning if it is not there
         prefix_sequence_ = prefix_sequence
         for i in range(len(prefix_sequence) - 1, -1, -1):
-            if prefix_sequence[i] == self.end_token_id: # When passing embeddings to LLM, the sequence begins with eos
+            if prefix_sequence[i] == self.bos_token_id: # When passing embeddings to LLM, the sequence begins with bos
                 prefix_sequence_ = prefix_sequence[i:]
                 break
-        if len(prefix_sequence_) == 0:
-            raise Exception('do not have start token')
+        # if len(prefix_sequence_) == 0:
+        #     print('prefix_sequence:', prefix_sequence)
+        #     print('prefix_sequence_:', prefix_sequence_)
+        #     print('end_token_id:', self.end_token_id)
+        #     raise Exception('do not have start token')
+
+        if len(prefix_sequence_) == 0 or prefix_sequence_[0] != self.bos_token_id:
+            prefix_sequence_ = [self.bos_token_id] + prefix_sequence_
         return Trie._get_from_trie(
             prefix_sequence_, self.trie_dict, self.append_trie, self.bos_token_id
         )
 
     @staticmethod
-    def load_from_dict(trie_dict, end_token_id):
-        trie = Trie(end_token_id=end_token_id)
+    def load_from_dict(trie_dict, end_token_id, bos_token_id):
+        trie = Trie(end_token_id=end_token_id, bos_token_id=bos_token_id)
         trie.trie_dict = trie_dict
         trie.len = sum(1 for _ in trie)
         return trie
@@ -109,11 +117,11 @@ class Trie(object):
 
 
 if __name__ == '__main__':
-    tree = Trie([[1, 2, 3], [1, 5, 6]])
+    tree = Trie([[1, 2, 3], [1, 5, 6]], bos_token_id=1, end_token_id=-1)
     print(tree.get([1]))
 
     eos=-1
-    tree = Trie([[1, 2, 3, eos], [1, 5, 6, eos]], end_token_id=eos)
-    print(tree.get([1, eos]))
+    tree = Trie([[1, 2, 3, eos], [1, 5, 6, eos]], bos_token_id=1,end_token_id=eos)
+    print(tree.get([1]))
 
     pass

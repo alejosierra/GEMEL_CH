@@ -110,10 +110,11 @@ def _main(args):
     args.ICL_ds = GEMELDataset(args.data_file['train'], tokenizer=None, img_feat=args.img_feat)
 
     args.kwargs_ds = {'train_ds': args.ICL_ds, 'ICL_examples_num': args.ICL_examples_num, 'img_feat': args.img_feat, 'device': args.device,
-                      'train_embed': args.train_embed, 'roberta_tokenizer': args.roberta_tokenizer, 'roberta_model': args.roberta_model}
+                      'train_embed': args.train_embed, 'roberta_tokenizer': args.roberta_tokenizer, 'roberta_model': args.roberta_model,
+                      'max_text_tokens': args.max_text_tokens}
 
     # prefix tree
-    args.trie = load_prefix_tree(args.trie_file, args.tokenizer.eos_token_id) if args.use_prefix_tree else None
+    args.trie = load_prefix_tree(args.trie_file, bos_token_id=args.tokenizer.bos_token_id, eos_token_id=args.tokenizer.eos_token_id) if args.use_prefix_tree else None
 
     # 5.inference test
     if args.do_test: _test(args)
