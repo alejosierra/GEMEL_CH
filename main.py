@@ -25,7 +25,7 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import params
-from utils import check_dirs, get_prefix_allowed_fn, set_seed, GEMELDataset, calc_acc, load_prefix_tree, get_embed, train_configure
+from utils import calc_r_at_1, check_dirs, get_prefix_allowed_fn, set_seed, GEMELDataset, calc_acc, load_prefix_tree, get_embed, train_configure
 
 
 
@@ -88,23 +88,24 @@ def _eval(args, dl):
                     input_text = ''.join([t for _, t in batch_pairs[i][-4:]])
                     print(f'\ninput_text:\n{input_text}')
                     print(f'\nresult: {batch_targets[i]==batch_preds[i].strip(" ")}\t\ttarget: {batch_targets[i]}\t\tpred: {batch_preds[i]}')
-    acc = calc_acc(predictions, targets)
-    return acc
+    #acc = calc_acc(predictions, targets)
+    r_at_1 = calc_r_at_1(predictions, targets)  
+    return r_at_1
 
 
 def _eval2save(args):
-    acc = _eval(args, args.eval_dl)
-    args.writer.add_scalar('eval_acc', acc, args.global_steps)
+    r_at_1 = _eval(args, args.eval_dl)
+    args.writer.add_scalar('eval_r_at_1', r_at_1, args.global_steps)
     # judge to save
-    if acc >= args.best_eval_acc:
-        print(f'\nNew best model, new acc {acc:.4f} % >= previous acc {args.best_eval_acc:.4f} %')
-        args.best_eval_acc = acc
+    if r_at_1 >= args.best_eval_r_at_1:
+        print(f'\nNew best model, new R@1 {r_at_1:.4f} % >= previous R@1 {args.best_eval_r_at_1:.4f} %')
+        args.best_eval_r_at_1 = r_at_1
         checkpoint_file = f'{args.ckpt_dir}{args.model_name}_{args.dataset}_linear_{args.visual_prefix_length}token_{args.ICL_examples_num}examples.pkl'  # only save 1 checkpoint
         torch.save(args.model.linear.state_dict(), checkpoint_file)
         print(f'\nSave to {checkpoint_file}')
 
-    elif acc < args.best_eval_acc:
-        print(f'\ndo not save, best acc: {args.best_eval_acc:.4f}')
+    elif r_at_1 < args.best_eval_r_at_1:
+        print(f'\ndo not save, best R@1: {args.best_eval_r_at_1:.4f}')
 
 
 def _train(args):

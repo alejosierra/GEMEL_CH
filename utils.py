@@ -163,6 +163,17 @@ def calc_acc(predictions, targets):
     print(f'\nacc: {acc:.4f} %')
     return acc
 
+def calc_r_at_1(predictions, targets):
+    """
+    Calculate the R@1 metric.
+    Predictions are a single entity and targets list of entities. This function calculates the R@1 metric, which checks if the top prediction is in the list of targets.
+    """
+    assert len(predictions) == len(targets)
+    hits = [predictions[i].strip(" ") in targets[i] for i in range(len(targets))]
+    r_at_1 = 100.0 * sum(hits) / len(hits)
+    print(f'\nR@1: {r_at_1:.4f} %')
+    return r_at_1
+
 
 def load_prefix_tree(trie_file, bos_token_id, eos_token_id):
     print(f'\nload prefix tree')
