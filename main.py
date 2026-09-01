@@ -233,6 +233,7 @@ def _main(args):
     # 5.train
     args.optimizer, args.scheduler = train_configure(args)
     args.best_eval_acc = float('-inf')
+    args.best_eval_r_at_1 = float('-inf')
     _train(args)
     _eval2save(args)
 
