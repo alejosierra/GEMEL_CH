@@ -22,11 +22,11 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import params
-from utils import check_dirs, set_seed, GEMELDataset, calc_acc, load_prefix_tree, get_embed
+from utils import calc_r_at_1, check_dirs, set_seed, GEMELDataset, get_prefix_allowed_fn, load_prefix_tree, get_embed
 
+from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
 
-
-
+import json
 
 def _test(args):
     test_ds = GEMELDataset(args.data_file['test'], args.tokenizer, **args.kwargs_ds)
@@ -37,7 +37,7 @@ def _test(args):
     checkpoint = torch.load(checkpoint_file)
     args.model.linear.load_state_dict(checkpoint)
 
-    acc = _eval(args, test_dl)
+    r_at_1 = _eval(args, test_dl)
 
 
 def _eval(args, dl):
@@ -47,6 +47,8 @@ def _eval(args, dl):
     predictions, targets = [], []
     # evaluate
     args.model.eval()
+    results_file=dict()
+    results_file['predictions'] = []
     with torch.no_grad():
         with tqdm(total=eval_steps) as pbar:
             for step, batch_data in enumerate(dl):
@@ -54,26 +56,38 @@ def _eval(args, dl):
                 pbar.update(1)
 
                 batch_pairs, batch_targets = batch_data
+
+                termination_tokens=[args.tokenizer.eos_token_id]
+                # add the ones already in the config
+                termination_tokens.extend(args.model.lm.generation_config.eos_token_id if isinstance(args.model.lm.generation_config.eos_token_id, list) else [args.model.lm.generation_config.eos_token_id])
+
+                termination_tokens=list(set(termination_tokens))  # remove duplicates
+
                 features = {
                     "batch_pairs": batch_pairs,
                     "num_beams": args.num_beams,
                     "num_return_sequences": 1,
                     "max_new_tokens": args.max_new_tokens,
+                    #"forced_bos_token_id": args.tokenizer.bos_token_id
+                    "eos_token_id": termination_tokens,
+                    "pad_token_id": args.tokenizer.eos_token_id,
+                    #"early_stopping": True,
                 }
                 if args.use_prefix_tree:
-                    features['prefix_allowed_tokens_fn'] = lambda batch_id, sent: args.trie.get(sent.tolist())
+                    features['prefix_allowed_tokens_fn'] = get_prefix_allowed_fn(args.trie, args.tokenizer)
                 generated = args.model.generate(**features)
                 batch_preds = args.tokenizer.batch_decode(generated, skip_special_tokens=True)
                 predictions.extend(batch_preds)
                 targets.extend(batch_targets)
-                # log prediction
-                if not step % 100:
-                    i = random.randint(0, len(batch_targets) - 1)
+                for i in range(len(batch_preds)):
                     input_text = ''.join([t for _, t in batch_pairs[i][-4:]])
-                    print(f'\ninput_text:\n{input_text}')
-                    print(f'\nresult: {batch_targets[i]==batch_preds[i].strip(" ")}\t\ttarget: {batch_targets[i]}\t\tpred: {batch_preds[i]}')
-    acc = calc_acc(predictions, targets)
-    return acc
+                    results_file['predictions'].append({'input_text': input_text, 'target': batch_targets[i], 'pred': batch_preds[i]})
+    r_at_1 = calc_r_at_1(predictions, targets)
+    results_file['metrics'] = {'r_at_1': r_at_1}
+    os.makedirs(os.path.dirname(args.inf_file), exist_ok=True)
+    with open(args.inf_file, 'w') as f:
+        json.dump(results_file, f, indent=4)
+    return r_at_1
 
 
 def _main(args):
@@ -84,12 +98,11 @@ def _main(args):
     set_seed(args.random_seed)
 
     # 3.model and tokenizer
-    from transformers import AutoTokenizer, OPTForCausalLM
     args.tokenizer = AutoTokenizer.from_pretrained(args.model_path, use_fast=False)
 
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     #  load the model in half-precision to accelerate generation and optimize memory consumption on GPU
-    lm = OPTForCausalLM.from_pretrained(args.model_path, torch_dtype=torch.float16, cache_dir=args.cache_dir)
+    lm = AutoModelForCausalLM.from_pretrained(args.model_path, torch_dtype=torch.float16, cache_dir=args.cache_dir)
     # freeze large language model
     print('\nFreeze LLM\n')
     for param in lm.parameters():

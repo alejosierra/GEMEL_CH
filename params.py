@@ -61,6 +61,7 @@ def get_args():
     args_parser.add_argument('--do_test', type=bool, default=True)
     # opt-6.7b_wikimel_linear_4token_16examples_75_53.pkl   opt-6.7b_wikidiverse_linear_4token_16examples_82_77.pkl
     args_parser.add_argument('--best_ckpt', type=str, default='opt-6.7b_wikidiverse_linear_4token_16examples_82_77.pkl') # for infe.py
+    args_parser.add_argument('--inf_file', type=str, default='./inference_results/results.json')
 
     # parse
     args = args_parser.parse_args()
