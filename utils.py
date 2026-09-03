@@ -170,7 +170,7 @@ def calc_r_at_1(predictions, targets):
     """
     assert len(predictions) == len(targets)
     hits = [predictions[i].strip(" ") in targets[i] for i in range(len(targets))]
-    r_at_1 = 100.0 * sum(hits) / len(hits)
+    r_at_1 = 100.0 * sum(hits) / sum(len(t) for t in targets if t)  # only consider non-empty target lists
     print(f'\nR@1: {r_at_1:.4f} %')
     return r_at_1
 
