@@ -2,6 +2,14 @@
 
 The original repository for GEMEL can be found [here](https://github.com/HITsz-TMG/GEMEL).
 
+## Scripts to run experiments with WikiMuSa:
+
+```
+adapt_wikimusa.sh
+train_wikimusa.sh
+python infe.py --dataset wikimusa --img_feat image_features.hdf5 --trie_file prefix_tree.pkl --ment_embed_file train_mentions_embeddings.pkl --model_name llama-3-8b --max_text_tokens 256 --random_seed $SLURM_ARRAY_TASK_ID --best_ckpt llama-3-8b_wikimusa_linear_4token_16examples.pkl --ckpt_dir ./checkpoint/wikimusa/<seed>/ --inf_file ./inference_results/wikimusa/<seed>/results.json
+```
+
 # GEMEL: Generative Multimodal Entity Linking
 
 <div align="center">
